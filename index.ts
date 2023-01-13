@@ -1,11 +1,3 @@
-type RenderType<T extends AnyObject = AnyObject> = {
-  tag: string | (() => RenderType),
-  children: RenderType[] | string
-  props?: {
-    [P in keyof T]: T[P]
-  },
-  render?(): RenderType
-}
 
 // # 渲染器
 function renderer(vNode: RenderType, container: HTMLElement) {
@@ -75,29 +67,38 @@ renderer({
 }, document.body)
 
 
-let activeEffect: { (): void; deps: Set<Function>[]; }
 
+// # 响应式系统内容
+let activeEffect: { (): void; deps: Set<Function>[]; }
+const effectStack: (typeof activeEffect)[] = []
 const source = {
   a: 'abcd',
   ok: true,
-  text: 'hello world'
+  text: 'hello world',
+  fff: 1
 }
 const bucket = new WeakMap<Object, Map<string | symbol, Set<Function>>>()
 
-const obj = new Proxy<typeof source & { [P in keyof any]: any }>(source, {
-  get(target, p) {
-    track(target, p)
+const f1 = { foo: true, bar: true }
 
-    return Reflect.get(target, p)
-  },
-  set(target, p, value) {
-    Reflect.set(target, p, value)
+const obj = setProxy(source)
 
-    trigger(target, p)
+function setProxy<T extends AnyObject>(source: T) {
+  return new Proxy<typeof source & { [P in keyof any]: any }>(source, {
+    get(target, p) {
+      track(target, p)
 
-    return true
-  },
-})
+      return Reflect.get(target, p)
+    },
+    set(target, p, value) {
+      Reflect.set(target, p, value)
+
+      trigger(target, p)
+
+      return true
+    },
+  })
+}
 
 function track(target, p) {
   // # 没有 activeEffect，直接 return
@@ -127,7 +128,8 @@ function trigger(target, p) {
 
   const deps = new Set(depsMap.get(p))
 
-  deps.forEach(func => func())
+  // # 当前活动的副作用函数如何与遍历出来的副作用函数相同，则取消执行
+  deps.forEach(func => activeEffect === func ? null : func())
 
   /**
    * # 在调用 forEach 遍历 Set 集合时，如果一个值已经被访问过了，
@@ -142,8 +144,14 @@ function trigger(target, p) {
 function effect(func: Function) {
   const effectHandler = () => {
     cleanup(effectHandler)
+    //# 当调用 effect 注册副作用函数时，将副作用函数赋值给 activeEffect
     activeEffect = effectHandler
+    //# 在调用副作用函数之前将当前副作用函数压入栈中
+    effectStack.push(activeEffect)
     func()
+    //# 在当前副作用函数执行完毕后，将当前副作用函数弹出栈，并把 activeEffect 还原为之前的值
+    effectStack.pop()
+    activeEffect = effectStack[effectStack.length - 1]
   }
 
   effectHandler.deps = []
@@ -152,13 +160,32 @@ function effect(func: Function) {
 }
 
 function cleanup(effectHandler: typeof activeEffect) {
-  if (!effectHandler.deps) return
+  if (!effectHandler.deps.length) return
   effectHandler.deps.forEach(dep => dep.delete(effectHandler))
 
   effectHandler.deps.length = 0
 }
 
+// # 避免不必要的执行
 effect(() => {
   console.log(123123)
   document.body.innerHTML = `<h2>${obj.ok ? obj.text : 'nothing'}</h2>`
+})
+
+// # 避免嵌套的副作用函数无法正确捕获
+// let temp1, temp2
+// effect(function effectFn1() {
+//   console.log('effectFn1 执行')
+//   effect(function effectFn2() {
+//     console.log('effectFn2 执行')
+//     // 在 effectFn2 中读取 obj.bar 属性
+//     temp2 = obj.bar
+//   })
+//   // 在 effectFn1 中读取 obj.foo 属性
+//   temp1 = obj.foo
+// })
+
+// # 避免无限递归循环
+effect(() => {
+  console.log(obj.fff++)
 })
