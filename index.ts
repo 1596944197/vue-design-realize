@@ -69,15 +69,15 @@ renderer({
 
 
 // # 响应式系统内容
-let activeEffect: { (): void; deps: Set<Function>[]; }
-const effectStack: (typeof activeEffect)[] = []
+let activeEffect: ActiveEffectType
+const effectStack: ActiveEffectType[] = []
 const source = {
   a: 'abcd',
   ok: true,
   text: 'hello world',
   fff: 1
 }
-const bucket = new WeakMap<Object, Map<string | symbol, Set<Function>>>()
+const bucket = new WeakMap<Object, Map<string | symbol, Set<ActiveEffectType>>>()
 
 const f1 = { foo: true, bar: true }
 
@@ -129,7 +129,15 @@ function trigger(target, p) {
   const deps = new Set(depsMap.get(p))
 
   // # 当前活动的副作用函数如何与遍历出来的副作用函数相同，则取消执行
-  deps.forEach(func => activeEffect === func ? null : func())
+  deps.forEach(effectFunc => {
+    if (activeEffect === effectFunc) return
+
+    if (effectFunc.options?.scheduler) {
+      effectFunc.options.scheduler(effectFunc)
+    } else {
+      effectFunc()
+    }
+  })
 
   /**
    * # 在调用 forEach 遍历 Set 集合时，如果一个值已经被访问过了，
@@ -141,7 +149,7 @@ function trigger(target, p) {
   // deps && deps.forEach(func => func())
 }
 
-function effect(func: Function) {
+function effect(func: Function, options?: EffectOptions) {
   const effectHandler = () => {
     cleanup(effectHandler)
     //# 当调用 effect 注册副作用函数时，将副作用函数赋值给 activeEffect
@@ -154,23 +162,48 @@ function effect(func: Function) {
     activeEffect = effectStack[effectStack.length - 1]
   }
 
+  // # 将选项挂载 到options上面
+  effectHandler.options = options
+
+  // # 初始化该副作用函数的依赖集合
   effectHandler.deps = []
 
   effectHandler()
 }
 
-function cleanup(effectHandler: typeof activeEffect) {
+function cleanup(effectHandler: ActiveEffectType) {
   if (!effectHandler.deps.length) return
   effectHandler.deps.forEach(dep => dep.delete(effectHandler))
 
   effectHandler.deps.length = 0
 }
 
+
+//# 定义一个任务队列
+const jobQueue = new Set<Function>()
+
+//# 一个标志代表是否正在刷新队列
+let isFlushing = false
+
+function flushJob() {
+  //# 如果队列正在刷新，则什么都不做
+  if (isFlushing) return
+
+  isFlushing = true
+
+  Promise.resolve().then(() => {
+    jobQueue.forEach(job => job())
+  }).finally(() => {
+    //# 结束后重置 isFlushing
+    isFlushing = false
+  })
+}
+
 // # 避免不必要的执行
-effect(() => {
-  console.log(123123)
-  document.body.innerHTML = `<h2>${obj.ok ? obj.text : 'nothing'}</h2>`
-})
+// effect(() => {
+//   console.log(123123)
+//   document.body.innerHTML = `<h2>${obj.ok ? obj.text : 'nothing'}</h2>`
+// })
 
 // # 避免嵌套的副作用函数无法正确捕获
 // let temp1, temp2
@@ -186,6 +219,20 @@ effect(() => {
 // })
 
 // # 避免无限递归循环
+// effect(() => {
+//   console.log(obj.fff++)
+// })
+
+// # 可控制的执行时机
 effect(() => {
-  console.log(obj.fff++)
+  console.log(obj.fff)
+}, {
+  scheduler(effectFunc) {
+    jobQueue.add(effectFunc)
+    flushJob()
+  },
 })
+
+++obj.fff
+++obj.fff
+++obj.fff
