@@ -16,7 +16,10 @@ declare type RenderType<T extends AnyObject = AnyObject> = {
 }
 
 declare type EffectOptions<T = ActiveEffectType> = {
-  scheduler(effectFunc: T): void;
+  scheduler?(effectFunc: T): void;
+  lazy?: boolean
 }
 
 declare type ActiveEffectType = { (): void; deps: Set<Function>[], options?: EffectOptions }
+
+declare type EffectFunc = () => any

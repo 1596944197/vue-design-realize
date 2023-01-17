@@ -75,7 +75,8 @@ const source = {
   a: 'abcd',
   ok: true,
   text: 'hello world',
-  fff: 1
+  fff: 2,
+  value: 0xff
 }
 const bucket = new WeakMap<Object, Map<string | symbol, Set<ActiveEffectType>>>()
 
@@ -103,7 +104,8 @@ function setProxy<T extends AnyObject>(source: T) {
 function track(target, p) {
   // # 没有 activeEffect，直接 return
 
-  if (!activeEffect) return Reflect.get(target, p)
+  // if (!activeEffect) return Reflect.get(target, p)
+  if (!activeEffect) return
 
   let depsMap = bucket.get(target)
 
@@ -144,22 +146,28 @@ function trigger(target, p) {
    * # 但该值被删除并重新添加到集合，如果此时 forEach 遍历没有结束，
    * # 那么该值会重新被访问。因此，上面的代码会无限执行。
    * # 根据书上解决方法之一是用set再包裹一层
+   * const deps = depsMap.get(p)
+   * deps && deps.forEach(func => func())
    */
-  // const deps = depsMap.get(p)
-  // deps && deps.forEach(func => func())
 }
 
-function effect(func: Function, options?: EffectOptions) {
+function effect<T extends EffectFunc>(func: T, options?: EffectOptions) {
   const effectHandler = () => {
     cleanup(effectHandler)
+
     //# 当调用 effect 注册副作用函数时，将副作用函数赋值给 activeEffect
     activeEffect = effectHandler
+
     //# 在调用副作用函数之前将当前副作用函数压入栈中
     effectStack.push(activeEffect)
-    func()
+
+    const result: ReturnType<T> = func()
+
     //# 在当前副作用函数执行完毕后，将当前副作用函数弹出栈，并把 activeEffect 还原为之前的值
     effectStack.pop()
     activeEffect = effectStack[effectStack.length - 1]
+
+    return result
   }
 
   // # 将选项挂载 到options上面
@@ -168,7 +176,11 @@ function effect(func: Function, options?: EffectOptions) {
   // # 初始化该副作用函数的依赖集合
   effectHandler.deps = []
 
-  effectHandler()
+  if (!options?.lazy) {
+    effectHandler()
+  }
+
+  return effectHandler
 }
 
 function cleanup(effectHandler: ActiveEffectType) {
@@ -224,15 +236,67 @@ function flushJob() {
 // })
 
 // # 可控制的执行时机
+// effect(() => {
+//   console.log(obj.fff)
+// }, {
+//   scheduler(effectFunc) {
+//     jobQueue.add(effectFunc)
+//     flushJob()
+//   },
+// })
+
+// ++obj.fff~
+// ++obj.fff
+// ++obj.fff
+
+
+// # 懒执行的副作用函数-
+// const res = effect(() => {
+//   console.log(obj.fff++)
+// }, {
+//   lazy: true
+// })
+// res()
+
+
+// # 简易的computed属性
+function computed<T extends EffectFunc>(getter: T) {
+  let value: ReturnType<T>
+  let dirty = true //# 脏值检测
+
+  //# 把 getter 作为副作用函数，创建一个 lazy 的 effect
+  const effectFn = effect(getter, {
+    lazy: true,
+    //# 添加调度器，在调度器中将 dirty 重置为 true
+    scheduler() {
+      dirty = true
+      trigger(obj, 'value')
+    },
+  })
+
+  const obj = {
+    //# 当读取 value 时才执行 effectFn
+    get value() {
+      if (dirty) {
+        value = effectFn()
+        dirty = false
+      }
+      track(obj, 'value')
+      return value
+    }
+  }
+  return obj
+}
+
+const r = computed(() => obj.fff * obj.fff)
+
+console.log(r.value)
+
+
 effect(() => {
-  console.log(obj.fff)
-}, {
-  scheduler(effectFunc) {
-    jobQueue.add(effectFunc)
-    flushJob()
-  },
+  console.log(r.value)
 })
 
-++obj.fff
-++obj.fff
-++obj.fff
+
+obj.fff++
+console.log(r.value)
