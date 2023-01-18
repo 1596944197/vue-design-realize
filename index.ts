@@ -297,12 +297,12 @@ effect(() => {
 obj.fff++
 
 // # 简易的watch函数
-function watch<T extends () => any, Cb extends (...args) => any>(source: T, callback: Cb);
-function watch<T extends AnyObject, Cb extends (...args) => any>(source: T, callback: Cb);
-function watch<T extends AnyObject, Cb extends (...args) => any>(source: T, callback: Cb) {
+function watch<T extends () => any, Cb extends (...args) => any>(source: T, callback: Cb, options?: WatchOptions);
+function watch<T extends AnyObject, Cb extends (...args) => any>(source: T, callback: Cb, options?: WatchOptions);
+function watch<T extends AnyObject, Cb extends (...args) => any>(source: T, callback: Cb, options?: WatchOptions) {
   // 定义 getter
   let getter: Function
-  // 如果 source 是函数，说明用户传递的是 getter，所以直接把 source 赋值给 getter
+  // 如果 source 是函数，说明用户传递的是 getter，所以直接把  source 赋值给 getter
   if (typeof source === 'function') {
     getter = source
   } else {
@@ -312,16 +312,29 @@ function watch<T extends AnyObject, Cb extends (...args) => any>(source: T, call
 
   let newVal, oldVal
 
-  const result = effect(() => getter(), {
+  const job = () => {
+    newVal = effectHandler()
+    callback(newVal, oldVal)
+    oldVal = newVal
+  }
+
+  const effectHandler = effect(() => getter(), {
     lazy: true,
     scheduler(effectHandler) {
-      newVal = effectHandler()
-      callback(newVal, oldVal)
-      oldVal = newVal
+      // # post代表异步？
+      if (options?.flush === 'post') {
+        Promise.resolve().then(job)
+      } else {
+        job()
+      }
     },
   })
 
-  oldVal = result()
+  if (options?.immediate) {
+    job()
+  } else {
+    oldVal = effectHandler()
+  }
 
   function traverse(value, seen = new Set()) {
     // 如果要读取的数据是原始值，或者已经被读取过了，那么什么都不做
@@ -340,11 +353,13 @@ function watch<T extends AnyObject, Cb extends (...args) => any>(source: T, call
 
 
 watch(obj, () => {
-  console.log('监听对象')
+  '监听对象'
 })
 
 watch(() => obj.text, (n, o) => {
   console.log(n, o)
+}, {
+  immediate: true
 })
 
 

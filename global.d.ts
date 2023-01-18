@@ -15,11 +15,16 @@ declare type RenderType<T extends AnyObject = AnyObject> = {
   render?(): RenderType
 }
 
-declare type EffectOptions<T = ActiveEffectType> = {
-  scheduler?(effectHandler: T): ReturnType<T>;
-  lazy?: boolean
-}
+declare type EffectOptions<T = ActiveEffectType> = Partial<{
+  scheduler(effectHandler: T): ReturnType<T>;
+  lazy: boolean
+}>
 
 declare type ActiveEffectType = { (): void; deps: Set<Function>[], options?: EffectOptions }
 
 declare type EffectFunc = () => any
+
+declare type WatchOptions = Partial<{
+  immediate: boolean
+  flush: 'post' | 'sync'
+}>
