@@ -16,7 +16,7 @@ declare type RenderType<T extends AnyObject = AnyObject> = {
 }
 
 declare type EffectOptions<T = ActiveEffectType> = {
-  scheduler?(effectFunc: T): void;
+  scheduler?(effectHandler: T): ReturnType<T>;
   lazy?: boolean
 }
 

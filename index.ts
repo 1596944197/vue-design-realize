@@ -101,6 +101,7 @@ function setProxy<T extends AnyObject>(source: T) {
   })
 }
 
+//# 跟踪数据
 function track(target, p) {
   // # 没有 activeEffect，直接 return
 
@@ -131,13 +132,13 @@ function trigger(target, p) {
   const deps = new Set(depsMap.get(p))
 
   // # 当前活动的副作用函数如何与遍历出来的副作用函数相同，则取消执行
-  deps.forEach(effectFunc => {
-    if (activeEffect === effectFunc) return
+  deps.forEach(effectHandler => {
+    if (activeEffect === effectHandler) return
 
-    if (effectFunc.options?.scheduler) {
-      effectFunc.options.scheduler(effectFunc)
+    if (effectHandler.options?.scheduler) {
+      effectHandler.options.scheduler(effectHandler)
     } else {
-      effectFunc()
+      effectHandler()
     }
   })
 
@@ -212,51 +213,50 @@ function flushJob() {
 }
 
 // # 避免不必要的执行
-// effect(() => {
-//   console.log(123123)
-//   document.body.innerHTML = `<h2>${obj.ok ? obj.text : 'nothing'}</h2>`
-// })
+effect(() => {
+  document.body.innerHTML = `<h2>${obj.ok ? obj.text : 'nothing'}</h2>`
+})
 
 // # 避免嵌套的副作用函数无法正确捕获
-// let temp1, temp2
-// effect(function effectFn1() {
-//   console.log('effectFn1 执行')
-//   effect(function effectFn2() {
-//     console.log('effectFn2 执行')
-//     // 在 effectFn2 中读取 obj.bar 属性
-//     temp2 = obj.bar
-//   })
-//   // 在 effectFn1 中读取 obj.foo 属性
-//   temp1 = obj.foo
-// })
+let temp1, temp2
+effect(function effectFn1() {
+  'effectFn1 执行'
+  effect(function effectFn2() {
+    'effectFn2 执行'
+    // 在 effectFn2 中读取 obj.bar 属性
+    temp2 = obj.bar
+  })
+  // 在 effectFn1 中读取 obj.foo 属性
+  temp1 = obj.foo
+})
 
 // # 避免无限递归循环
-// effect(() => {
-//   console.log(obj.fff++)
-// })
+effect(() => {
+  obj.fff
+})
 
 // # 可控制的执行时机
-// effect(() => {
-//   console.log(obj.fff)
-// }, {
-//   scheduler(effectFunc) {
-//     jobQueue.add(effectFunc)
-//     flushJob()
-//   },
-// })
+effect(() => {
+  obj.fff
+}, {
+  scheduler(effectHandler) {
+    jobQueue.add(effectHandler)
+    flushJob()
+  },
+})
 
-// ++obj.fff~
-// ++obj.fff
-// ++obj.fff
+++obj.fff
+++obj.fff
+++obj.fff
 
 
 // # 懒执行的副作用函数-
-// const res = effect(() => {
-//   console.log(obj.fff++)
-// }, {
-//   lazy: true
-// })
-// res()
+const res = effect(() => {
+  obj.fff++
+}, {
+  lazy: true
+})
+res()
 
 
 // # 简易的computed属性
@@ -290,13 +290,62 @@ function computed<T extends EffectFunc>(getter: T) {
 
 const r = computed(() => obj.fff * obj.fff)
 
-console.log(r.value)
-
-
 effect(() => {
-  console.log(r.value)
+  r.value
+})
+
+obj.fff++
+
+// # 简易的watch函数
+function watch<T extends () => any, Cb extends (...args) => any>(source: T, callback: Cb);
+function watch<T extends AnyObject, Cb extends (...args) => any>(source: T, callback: Cb);
+function watch<T extends AnyObject, Cb extends (...args) => any>(source: T, callback: Cb) {
+  // 定义 getter
+  let getter: Function
+  // 如果 source 是函数，说明用户传递的是 getter，所以直接把 source 赋值给 getter
+  if (typeof source === 'function') {
+    getter = source
+  } else {
+    // 否则按照原来的实现调用 traverse 递归地读取
+    getter = () => traverse(source)
+  }
+
+  let newVal, oldVal
+
+  const result = effect(() => getter(), {
+    lazy: true,
+    scheduler(effectHandler) {
+      newVal = effectHandler()
+      callback(newVal, oldVal)
+      oldVal = newVal
+    },
+  })
+
+  oldVal = result()
+
+  function traverse(value, seen = new Set()) {
+    // 如果要读取的数据是原始值，或者已经被读取过了，那么什么都不做
+    if (typeof value !== 'object' || value === null || seen.has(value)) return
+    // 将数据添加到 seen 中，代表遍历地读取过了，避免循环引用引起的死循环
+    seen.add(value)
+    // 暂时不考虑数组等其他结构
+    // 假设 value 就是一个对象，使用 for...in 读取对象的每一个值，并递归地调用 traverse 进行处理
+    for (const k in value) {
+      traverse(value[k], seen)
+    }
+    return value
+  }
+}
+
+
+
+watch(obj, () => {
+  console.log('监听对象')
+})
+
+watch(() => obj.text, (n, o) => {
+  console.log(n, o)
 })
 
 
-obj.fff++
-console.log(r.value)
+obj.text = '2323232424242'
