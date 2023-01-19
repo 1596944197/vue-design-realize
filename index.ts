@@ -297,9 +297,9 @@ effect(() => {
 obj.fff++
 
 // # 简易的watch函数
-function watch<T extends () => any, Cb extends (...args) => any>(source: T, callback: Cb, options?: WatchOptions);
-function watch<T extends AnyObject, Cb extends (...args) => any>(source: T, callback: Cb, options?: WatchOptions);
-function watch<T extends AnyObject, Cb extends (...args) => any>(source: T, callback: Cb, options?: WatchOptions) {
+function watch<T extends () => any, Cb extends WatchCallback>(source: T, callback: Cb, options?: WatchOptions);
+function watch<T extends AnyObject, Cb extends WatchCallback>(source: T, callback: Cb, options?: WatchOptions);
+function watch<T extends AnyObject, Cb extends WatchCallback>(source: T, callback: Cb, options?: WatchOptions) {
   // 定义 getter
   let getter: Function
   // 如果 source 是函数，说明用户传递的是 getter，所以直接把  source 赋值给 getter
@@ -312,9 +312,21 @@ function watch<T extends AnyObject, Cb extends (...args) => any>(source: T, call
 
   let newVal, oldVal
 
+
+  let cleanup: Function;
+
+  // 定义 onInvalidate 函数
+  function onInvalidate(fn: Function) {
+    // 将过期回调存储到 cleanup 中
+    cleanup = fn
+  }
+
   const job = () => {
     newVal = effectHandler()
-    callback(newVal, oldVal)
+
+    //# 在调用回调函数 cb 之前，先调用过期回调
+    if (cleanup) cleanup()
+    callback(newVal, oldVal, onInvalidate)
     oldVal = newVal
   }
 

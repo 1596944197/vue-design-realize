@@ -28,3 +28,5 @@ declare type WatchOptions = Partial<{
   immediate: boolean
   flush: 'post' | 'sync'
 }>
+
+declare type WatchCallback = (newVal, oldVal, onInvalidate: Function) => any
