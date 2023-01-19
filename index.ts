@@ -76,7 +76,10 @@ const source = {
   ok: true,
   text: 'hello world',
   fff: 2,
-  value: 0xff
+  value: 0xff,
+  get bar() {
+    return this.value
+  }
 }
 const bucket = new WeakMap<Object, Map<string | symbol, Set<ActiveEffectType>>>()
 
@@ -86,13 +89,13 @@ const obj = setProxy(source)
 
 function setProxy<T extends AnyObject>(source: T) {
   return new Proxy<typeof source & { [P in keyof any]: any }>(source, {
-    get(target, p) {
+    get(target, p, receiver) {
       track(target, p)
 
-      return Reflect.get(target, p)
+      return Reflect.get(target, p, receiver)
     },
-    set(target, p, value) {
-      Reflect.set(target, p, value)
+    set(target, p, value, receiver) {
+      Reflect.set(target, p, value, receiver)
 
       trigger(target, p)
 
@@ -212,90 +215,6 @@ function flushJob() {
   })
 }
 
-// # 避免不必要的执行
-effect(() => {
-  document.body.innerHTML = `<h2>${obj.ok ? obj.text : 'nothing'}</h2>`
-})
-
-// # 避免嵌套的副作用函数无法正确捕获
-let temp1, temp2
-effect(function effectFn1() {
-  'effectFn1 执行'
-  effect(function effectFn2() {
-    'effectFn2 执行'
-    // 在 effectFn2 中读取 obj.bar 属性
-    temp2 = obj.bar
-  })
-  // 在 effectFn1 中读取 obj.foo 属性
-  temp1 = obj.foo
-})
-
-// # 避免无限递归循环
-effect(() => {
-  obj.fff
-})
-
-// # 可控制的执行时机
-effect(() => {
-  obj.fff
-}, {
-  scheduler(effectHandler) {
-    jobQueue.add(effectHandler)
-    flushJob()
-  },
-})
-
-++obj.fff
-++obj.fff
-++obj.fff
-
-
-// # 懒执行的副作用函数-
-const res = effect(() => {
-  obj.fff++
-}, {
-  lazy: true
-})
-res()
-
-
-// # 简易的computed属性
-function computed<T extends EffectFunc>(getter: T) {
-  let value: ReturnType<T>
-  let dirty = true //# 脏值检测
-
-  //# 把 getter 作为副作用函数，创建一个 lazy 的 effect
-  const effectFn = effect(getter, {
-    lazy: true,
-    //# 添加调度器，在调度器中将 dirty 重置为 true
-    scheduler() {
-      dirty = true
-      trigger(obj, 'value')
-    },
-  })
-
-  const obj = {
-    //# 当读取 value 时才执行 effectFn
-    get value() {
-      if (dirty) {
-        value = effectFn()
-        dirty = false
-      }
-      track(obj, 'value')
-      return value
-    }
-  }
-  return obj
-}
-
-const r = computed(() => obj.fff * obj.fff)
-
-effect(() => {
-  r.value
-})
-
-obj.fff++
-
 // # 简易的watch函数
 function watch<T extends () => any, Cb extends WatchCallback>(source: T, callback: Cb, options?: WatchOptions);
 function watch<T extends AnyObject, Cb extends WatchCallback>(source: T, callback: Cb, options?: WatchOptions);
@@ -364,6 +283,92 @@ function watch<T extends AnyObject, Cb extends WatchCallback>(source: T, callbac
 
 
 
+// # 简易的computed属性
+function computed<T extends EffectFunc>(getter: T) {
+  let value: ReturnType<T>
+  let dirty = true //# 脏值检测
+
+  //# 把 getter 作为副作用函数，创建一个 lazy 的 effect
+  const effectFn = effect(getter, {
+    lazy: true,
+    //# 添加调度器，在调度器中将 dirty 重置为 true
+    scheduler() {
+      dirty = true
+      trigger(obj, 'value')
+    },
+  })
+
+  const obj = {
+    //# 当读取 value 时才执行 effectFn
+    get value() {
+      if (dirty) {
+        value = effectFn()
+        dirty = false
+      }
+      track(obj, 'value')
+      return value
+    }
+  }
+  return obj
+}
+
+
+
+// # 避免不必要的执行
+effect(() => {
+  document.body.innerHTML = `<h2>${obj.ok ? obj.text : 'nothing'}</h2>`
+})
+
+// # 避免嵌套的副作用函数无法正确捕获
+let temp1, temp2
+effect(function effectFn1() {
+  'effectFn1 执行'
+  effect(function effectFn2() {
+    'effectFn2 执行'
+    // 在 effectFn2 中读取 obj.bar 属性
+    temp2 = obj.bar
+  })
+  // 在 effectFn1 中读取 obj.foo 属性
+  temp1 = obj.foo
+})
+
+// # 避免无限递归循环
+effect(() => {
+  obj.fff
+})
+
+// # 可控制的执行时机
+effect(() => {
+  obj.fff
+}, {
+  scheduler(effectHandler) {
+    jobQueue.add(effectHandler)
+    flushJob()
+  },
+})
+
+++obj.fff
+++obj.fff
+++obj.fff
+
+
+// # 懒执行的副作用函数-
+const res = effect(() => {
+  obj.fff++
+}, {
+  lazy: true
+})
+res()
+
+
+const r = computed(() => obj.fff * obj.fff)
+
+effect(() => {
+  r.value
+})
+
+obj.fff++
+
 watch(obj, () => {
   '监听对象'
 })
@@ -376,3 +381,9 @@ watch(() => obj.text, (n, o) => {
 
 
 obj.text = '2323232424242'
+
+
+effect(() => console.log(obj.bar))
+
+
+obj.value++
