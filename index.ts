@@ -1,15 +1,34 @@
-
-// # 渲染器
+/**
+ * # 渲染器
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @param {RenderType} vNode
+ * @param {HTMLElement} container
+ */
 function renderer(vNode: RenderType, container: HTMLElement) {
   if (typeof vNode.tag === 'string') mountElement(vNode, container)
 
   else mountComponent(vNode, container)
 }
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @param {unknown} tag
+ * @returns {tag is () => RenderType}
+ */
 function isFunc(tag: unknown): tag is () => RenderType {
   return typeof tag === 'function'
 }
 
+/**
+ * # 渲染实体元素
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @param {RenderType} vNode
+ * @param {HTMLElement} container
+ */
 function mountElement(vNode: RenderType, container: HTMLElement) {
   // 使用 vNode.tag 作为标签名称创建 DOM 元素
   const el = document.createElement(vNode.tag as string)
@@ -37,6 +56,13 @@ function mountElement(vNode: RenderType, container: HTMLElement) {
   container.appendChild(el)
 }
 
+/**
+ * # 渲染组件
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @param {RenderType} vNode
+ * @param {HTMLElement} container
+ */
 function mountComponent(vNode: RenderType, container: HTMLElement) {
   if (isFunc(vNode.tag)) {
     const subTree = vNode.tag()
@@ -69,8 +95,26 @@ renderer({
 
 
 // # 响应式系统内容
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @type {ActiveEffectType}
+ */
 let activeEffect: ActiveEffectType
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @type {ActiveEffectType[]}
+ */
 const effectStack: ActiveEffectType[] = []
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @type {{ a: string; ok: boolean; text: string; fff: number; value: number; readonly bar: any; }}
+ */
 const source = {
   a: 'abcd',
   ok: true,
@@ -81,12 +125,38 @@ const source = {
     return this.value
   }
 }
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @type {*}
+ */
 const bucket = new WeakMap<Object, Map<string | symbol, Set<ActiveEffectType>>>()
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @type {{ foo: boolean; bar: boolean; }}
+ */
 const f1 = { foo: true, bar: true }
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @type {*}
+ */
 const obj = setProxy(source)
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @template T extends AnyObject
+ * @param {T} source
+ * @returns {*}
+ */
 function setProxy<T extends AnyObject>(source: T) {
   return new Proxy<typeof source & { [P in keyof any]: any }>(source, {
     get(target, p, receiver) {
@@ -101,10 +171,22 @@ function setProxy<T extends AnyObject>(source: T) {
 
       return true
     },
+    deleteProperty(target, p) {
+      track(target, p)
+      return Reflect.deleteProperty(target, p)
+    },
+    has(target, p) {
+      return false
+    },
   })
 }
 
-//# 跟踪数据
+/**
+ * # 跟踪数据
+ * @param {target} 代理对象 
+ * @param {p} 访问的属性
+ * @returns {} void
+ */
 function track(target, p) {
   // # 没有 activeEffect，直接 return
 
@@ -127,6 +209,12 @@ function track(target, p) {
   activeEffect.deps.push(deps)
 }
 
+/**
+ * # 触发副作用函数
+ * @param target 代理对象 
+ * @param p 访问的属性
+ * @returns  void
+ */
 function trigger(target, p) {
   const depsMap = bucket.get(target)
 
@@ -155,6 +243,15 @@ function trigger(target, p) {
    */
 }
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @template T extends EffectFunc
+ * @param {T} func
+ * @param {?EffectOptions} [options]
+ * @returns {{ (): any; options: any; deps: {}; }}
+ */
 function effect<T extends EffectFunc>(func: T, options?: EffectOptions) {
   const effectHandler = () => {
     cleanup(effectHandler)
@@ -187,6 +284,12 @@ function effect<T extends EffectFunc>(func: T, options?: EffectOptions) {
   return effectHandler
 }
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @param {ActiveEffectType} effectHandler
+ */
 function cleanup(effectHandler: ActiveEffectType) {
   if (!effectHandler.deps.length) return
   effectHandler.deps.forEach(dep => dep.delete(effectHandler))
@@ -196,11 +299,27 @@ function cleanup(effectHandler: ActiveEffectType) {
 
 
 //# 定义一个任务队列
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @type {*}
+ */
 const jobQueue = new Set<Function>()
 
 //# 一个标志代表是否正在刷新队列
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @type {boolean}
+ */
 let isFlushing = false
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ */
 function flushJob() {
   //# 如果队列正在刷新，则什么都不做
   if (isFlushing) return
@@ -216,8 +335,41 @@ function flushJob() {
 }
 
 // # 简易的watch函数
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @template T extends () => any
+ * @template Cb extends WatchCallback
+ * @param {T} source
+ * @param {Cb} callback
+ * @param {?WatchOptions} [options]
+ * @returns {any, Cb extends any>(source: T, callback: Cb, options?: any): any; <T extends any, Cb extends any>(source: T, callback: Cb, options?: any): any; }}
+ */
 function watch<T extends () => any, Cb extends WatchCallback>(source: T, callback: Cb, options?: WatchOptions);
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @template T extends AnyObject
+ * @template Cb extends WatchCallback
+ * @param {T} source
+ * @param {Cb} callback
+ * @param {?WatchOptions} [options]
+ * @returns {any, Cb extends any>(source: T, callback: Cb, options?: any): any; <T extends any, Cb extends any>(source: T, callback: Cb, options?: any): any; }}
+ */
 function watch<T extends AnyObject, Cb extends WatchCallback>(source: T, callback: Cb, options?: WatchOptions);
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @template T extends AnyObject
+ * @template Cb extends WatchCallback
+ * @param {T} source
+ * @param {Cb} callback
+ * @param {?WatchOptions} [options]
+ * @returns {any, Cb extends any>(source: T, callback: Cb, options?: any): any; <T extends any, Cb extends any>(source: T, callback: Cb, options?: any): any; }}
+ */
 function watch<T extends AnyObject, Cb extends WatchCallback>(source: T, callback: Cb, options?: WatchOptions) {
   // 定义 getter
   let getter: Function
@@ -284,6 +436,14 @@ function watch<T extends AnyObject, Cb extends WatchCallback>(source: T, callbac
 
 
 // # 简易的computed属性
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @template T extends EffectFunc
+ * @param {T} getter
+ * @returns {{ readonly value: any; }}
+ */
 function computed<T extends EffectFunc>(getter: T) {
   let value: ReturnType<T>
   let dirty = true //# 脏值检测
@@ -320,6 +480,12 @@ effect(() => {
 })
 
 // # 避免嵌套的副作用函数无法正确捕获
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @type {*}
+ */
 let temp1, temp2
 effect(function effectFn1() {
   'effectFn1 执行'
@@ -353,6 +519,12 @@ effect(() => {
 
 
 // # 懒执行的副作用函数-
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @type {{ (): any; options: any; deps: {}; }}
+ */
 const res = effect(() => {
   obj.fff++
 }, {
@@ -361,6 +533,12 @@ const res = effect(() => {
 res()
 
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:12:48
+ *
+ * @type {{ readonly value: any; }}
+ */
 const r = computed(() => obj.fff * obj.fff)
 
 effect(() => {

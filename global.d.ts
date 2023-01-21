@@ -1,11 +1,38 @@
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:21:16
+ *
+ * @typedef {AnyObject}
+ */
 declare type AnyObject = {
   [P in keyof any]: any
 } & Object
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:21:16
+ *
+ * @param {AnyObject} target
+ * @param {(string | symbol)} p
+ */
 declare function track(target: AnyObject, p: string | symbol): void
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:21:16
+ *
+ * @param {AnyObject} target
+ * @param {(string | symbol)} p
+ */
 declare function trigger(target: AnyObject, p: string | symbol): void
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:21:16
+ *
+ * @typedef {RenderType}
+ * @template T extends AnyObject = AnyObject
+ */
 declare type RenderType<T extends AnyObject = AnyObject> = {
   tag: string | (() => RenderType),
   children: RenderType[] | string
@@ -15,18 +42,49 @@ declare type RenderType<T extends AnyObject = AnyObject> = {
   render?(): RenderType
 }
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:21:16
+ *
+ * @typedef {EffectOptions}
+ * @template T = ActiveEffectType
+ */
 declare type EffectOptions<T = ActiveEffectType> = Partial<{
   scheduler(effectHandler: T): ReturnType<T>;
   lazy: boolean
 }>
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:21:16
+ *
+ * @typedef {ActiveEffectType}
+ */
 declare type ActiveEffectType = { (): void; deps: Set<Function>[], options?: EffectOptions }
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:21:16
+ *
+ * @typedef {EffectFunc}
+ */
 declare type EffectFunc = () => any
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:21:16
+ *
+ * @typedef {WatchOptions}
+ */
 declare type WatchOptions = Partial<{
   immediate: boolean
   flush: 'post' | 'sync'
 }>
 
+/**
+ * Description placeholder
+ * @date 2023/1/21 - 10:21:16
+ *
+ * @typedef {WatchCallback}
+ */
 declare type WatchCallback = (newVal, oldVal, onInvalidate: Function) => any
