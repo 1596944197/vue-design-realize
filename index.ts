@@ -95,26 +95,10 @@ renderer({
 
 
 // # 响应式系统内容
-/**
- * Description placeholder
- * @date 2023/1/21 - 10:12:48
- *
- * @type {ActiveEffectType}
- */
 let activeEffect: ActiveEffectType
-/**
- * Description placeholder
- * @date 2023/1/21 - 10:12:48
- *
- * @type {ActiveEffectType[]}
- */
+
 const effectStack: ActiveEffectType[] = []
-/**
- * Description placeholder
- * @date 2023/1/21 - 10:12:48
- *
- * @type {{ a: string; ok: boolean; text: string; fff: number; value: number; readonly bar: any; }}
- */
+
 const source = {
   a: 'abcd',
   ok: true,
@@ -125,32 +109,21 @@ const source = {
     return this.value
   }
 }
-/**
- * Description placeholder
- * @date 2023/1/21 - 10:12:48
- *
- * @type {*}
- */
+
 const bucket = new WeakMap<Object, Map<string | symbol, Set<ActiveEffectType>>>()
 
-/**
- * Description placeholder
- * @date 2023/1/21 - 10:12:48
- *
- * @type {{ foo: boolean; bar: boolean; }}
- */
 const f1 = { foo: true, bar: true }
 
-/**
- * Description placeholder
- * @date 2023/1/21 - 10:12:48
- *
- * @type {*}
- */
 const obj = setProxy(source)
+const ITERATE_KEY = Symbol()
 
+enum CurrentSetType {
+  ADD = 'ADD',
+  SET = 'SET',
+  DELETE = 'DELETE'
+}
 /**
- * Description placeholder
+ * # 设置代理对象
  * @date 2023/1/21 - 10:12:48
  *
  * @template T extends AnyObject
@@ -165,18 +138,29 @@ function setProxy<T extends AnyObject>(source: T) {
       return Reflect.get(target, p, receiver)
     },
     set(target, p, value, receiver) {
-      Reflect.set(target, p, value, receiver)
+      const type = Object.prototype.hasOwnProperty.call(target, p) ? CurrentSetType['SET'] : CurrentSetType['ADD']
+      const r = Reflect.set(target, p, value, receiver)
 
-      trigger(target, p)
+      trigger(target, p, type)
 
-      return true
+      return r
     },
     deleteProperty(target, p) {
-      track(target, p)
-      return Reflect.deleteProperty(target, p)
+      const r = Reflect.deleteProperty(target, p)
+
+      const type = Object.hasOwnProperty.call(target, p) ? CurrentSetType['DELETE'] : null
+
+      if (r && type === CurrentSetType['DELETE']) trigger(target, p, type)
+
+      return r
     },
     has(target, p) {
-      return false
+      track(target, p)
+      return Reflect.has(target, p)
+    },
+    ownKeys(target) {
+      track(target, ITERATE_KEY)
+      return Reflect.ownKeys(target)
     },
   })
 }
@@ -215,12 +199,17 @@ function track(target, p) {
  * @param p 访问的属性
  * @returns  void
  */
-function trigger(target, p) {
+function trigger(target, p, type?: CurrentSetType) {
   const depsMap = bucket.get(target)
 
   if (!depsMap) return
 
-  const deps = new Set(depsMap.get(p))
+  let deps = new Set(depsMap.get(p))
+
+  if (type === CurrentSetType['ADD'] || type === CurrentSetType['DELETE']) {
+    // # 只有当给对象添加属性时，才会触发 for in相关操作
+    depsMap.get(ITERATE_KEY)?.forEach(v => v && deps.add(v))
+  }
 
   // # 当前活动的副作用函数如何与遍历出来的副作用函数相同，则取消执行
   deps.forEach(effectHandler => {
@@ -552,7 +541,7 @@ watch(obj, () => {
 })
 
 watch(() => obj.text, (n, o) => {
-  console.log(n, o)
+  n; o
 }, {
   immediate: true
 })
@@ -560,8 +549,12 @@ watch(() => obj.text, (n, o) => {
 
 obj.text = '2323232424242'
 
-
-effect(() => console.log(obj.bar))
-
+effect(() => obj.bar)
 
 obj.value++
+
+effect(() => {
+  for (const key in obj) {
+    console.log(key)
+  }
+})

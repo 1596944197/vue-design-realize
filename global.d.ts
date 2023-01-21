@@ -12,24 +12,6 @@ declare type AnyObject = {
  * Description placeholder
  * @date 2023/1/21 - 10:21:16
  *
- * @param {AnyObject} target
- * @param {(string | symbol)} p
- */
-declare function track(target: AnyObject, p: string | symbol): void
-
-/**
- * Description placeholder
- * @date 2023/1/21 - 10:21:16
- *
- * @param {AnyObject} target
- * @param {(string | symbol)} p
- */
-declare function trigger(target: AnyObject, p: string | symbol): void
-
-/**
- * Description placeholder
- * @date 2023/1/21 - 10:21:16
- *
  * @typedef {RenderType}
  * @template T extends AnyObject = AnyObject
  */
