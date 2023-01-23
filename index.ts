@@ -95,9 +95,15 @@ renderer({
 
 
 // # 响应式系统内容
+// ! 常量属性start
 let activeEffect: ActiveEffectType
 
 const effectStack: ActiveEffectType[] = []
+
+const bucket = new WeakMap<Object, Map<string | symbol, Set<ActiveEffectType>>>()
+
+const ITERATE_KEY = Symbol()
+// ! 常量属性end
 
 const source = {
   a: 'abcd',
@@ -107,15 +113,17 @@ const source = {
   value: 0xff,
   get bar() {
     return this.value
-  }
+  },
+  nan: NaN
 }
 
-const bucket = new WeakMap<Object, Map<string | symbol, Set<ActiveEffectType>>>()
 
-const f1 = { foo: true, bar: true }
+const f1 = {}
 
 const obj = setProxy(source)
-const ITERATE_KEY = Symbol()
+const child = setProxy(f1)
+
+Object.setPrototypeOf(child, obj)
 
 enum CurrentSetType {
   ADD = 'ADD',
@@ -133,15 +141,24 @@ enum CurrentSetType {
 function setProxy<T extends AnyObject>(source: T) {
   return new Proxy<typeof source & { [P in keyof any]: any }>(source, {
     get(target, p, receiver) {
+      if (p === '_sourceObj') {
+        return target
+      }
+
       track(target, p)
 
       return Reflect.get(target, p, receiver)
     },
     set(target, p, value, receiver) {
+
+      const oldVal = target[p as string]
+
       const type = Object.prototype.hasOwnProperty.call(target, p) ? CurrentSetType['SET'] : CurrentSetType['ADD']
       const r = Reflect.set(target, p, value, receiver)
 
-      trigger(target, p, type)
+      if (!Object.is(oldVal, value) && Object.is(target, receiver._sourceObj)) {
+        trigger(target, p, type)
+      }
 
       return r
     },
@@ -555,6 +572,17 @@ obj.value++
 
 effect(() => {
   for (const key in obj) {
-    console.log(key)
+    key
   }
 })
+
+effect(() => obj.nan)
+
+obj.nan = NaN
+
+
+effect(() => {
+  console.log(child.nan)
+})
+
+child.nan = false
