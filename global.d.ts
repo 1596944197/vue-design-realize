@@ -70,3 +70,7 @@ declare type WatchOptions = Partial<{
  * @typedef {WatchCallback}
  */
 declare type WatchCallback = (newVal, oldVal, onInvalidate: Function) => any
+
+declare type ReactiveOptions = Partial<{
+  isShallow: boolean
+}>

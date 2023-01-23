@@ -118,12 +118,12 @@ const source = {
 }
 
 
-const f1 = {}
+const f1 = { foo: { bar: 1 } }
 
-const obj = setProxy(source)
-const child = setProxy(f1)
-
-Object.setPrototypeOf(child, obj)
+const obj = reactive(source)
+const child = reactive(f1, {
+  isShallow: true
+})
 
 enum CurrentSetType {
   ADD = 'ADD',
@@ -138,7 +138,7 @@ enum CurrentSetType {
  * @param {T} source
  * @returns {*}
  */
-function setProxy<T extends AnyObject>(source: T) {
+function reactive<T extends AnyObject>(source: T, options: ReactiveOptions = {}) {
   return new Proxy<typeof source & { [P in keyof any]: any }>(source, {
     get(target, p, receiver) {
       if (p === '_sourceObj') {
@@ -147,7 +147,13 @@ function setProxy<T extends AnyObject>(source: T) {
 
       track(target, p)
 
-      return Reflect.get(target, p, receiver)
+      const response = Reflect.get(target, p, receiver)
+
+      if (typeof response === 'object' && !Object.is(response, NaN) && !options.isShallow) {
+        return reactive(response)
+      }
+
+      return response
     },
     set(target, p, value, receiver) {
 
@@ -582,7 +588,7 @@ obj.nan = NaN
 
 
 effect(() => {
-  console.log(child.nan)
+  console.log(child.foo.bar)
 })
 
-child.nan = false
+child.foo.bar++
