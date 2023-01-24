@@ -118,46 +118,44 @@ const source = {
 }
 
 
-const f1 = { foo: { bar: 1 } }
+const f1 = { foo: { bar: { a: 1, b: 2 } } }
 
 const obj = reactive(source)
-const child = reactive(f1, {
-  isShallow: true
-})
+
+// # 测试继承、只读、浅响应等
+const child = shallowReadonlyReactive(f1)
 
 enum CurrentSetType {
   ADD = 'ADD',
   SET = 'SET',
   DELETE = 'DELETE'
 }
-/**
- * # 设置代理对象
- * @date 2023/1/21 - 10:12:48
- *
- * @template T extends AnyObject
- * @param {T} source
- * @returns {*}
- */
-function reactive<T extends AnyObject>(source: T, options: ReactiveOptions = {}) {
-  return new Proxy<typeof source & { [P in keyof any]: any }>(source, {
+
+
+function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, options?: O): ReactiveObject<T, O> {
+  return new Proxy<ReactiveObject<T, O>>(source, {
     get(target, p, receiver) {
       if (p === '_sourceObj') {
         return target
       }
 
-      track(target, p)
+      if (!options?.isReadonly) track(target, p)
 
       const response = Reflect.get(target, p, receiver)
 
-      if (typeof response === 'object' && !Object.is(response, NaN) && !options.isShallow) {
-        return reactive(response)
+      if (typeof response === 'object' && !Object.is(response, NaN) && !options?.isShallow) {
+        return options?.isReadonly ? reactive(response, options) : reactive(response)
       }
 
       return response
     },
-    set(target, p, value, receiver) {
+    set(target, p: string, value, receiver) {
+      if (options?.isReadonly) {
+        console.warn(`属性${p}是只读的`)
+        return true
+      }
 
-      const oldVal = target[p as string]
+      const oldVal = target[p]
 
       const type = Object.prototype.hasOwnProperty.call(target, p) ? CurrentSetType['SET'] : CurrentSetType['ADD']
       const r = Reflect.set(target, p, value, receiver)
@@ -168,7 +166,12 @@ function reactive<T extends AnyObject>(source: T, options: ReactiveOptions = {})
 
       return r
     },
-    deleteProperty(target, p) {
+    deleteProperty(target, p: string) {
+      if (options?.isReadonly) {
+        console.warn(`属性${p}是只读的`)
+        return true
+      }
+
       const r = Reflect.deleteProperty(target, p)
 
       const type = Object.hasOwnProperty.call(target, p) ? CurrentSetType['DELETE'] : null
@@ -185,6 +188,29 @@ function reactive<T extends AnyObject>(source: T, options: ReactiveOptions = {})
       track(target, ITERATE_KEY)
       return Reflect.ownKeys(target)
     },
+  })
+}
+
+
+
+function shallowReactive<T extends AnyObject>(source: T) {
+  return reactive(source, {
+    isShallow: true
+  })
+}
+
+
+function readonlyReactive<T extends AnyObject>(source: T) {
+  return reactive(source, {
+    isReadonly: true
+  })
+}
+
+
+function shallowReadonlyReactive<T extends AnyObject>(source: T) {
+  return reactive(source, {
+    isReadonly: true,
+    isShallow: true,
   })
 }
 
@@ -239,7 +265,7 @@ function trigger(target, p, type?: CurrentSetType) {
     if (activeEffect === effectHandler) return
 
     if (effectHandler.options?.scheduler) {
-      effectHandler.options.scheduler(effectHandler)
+      effectHandler.options?.scheduler(effectHandler)
     } else {
       effectHandler()
     }
@@ -586,9 +612,3 @@ effect(() => obj.nan)
 
 obj.nan = NaN
 
-
-effect(() => {
-  console.log(child.foo.bar)
-})
-
-child.foo.bar++

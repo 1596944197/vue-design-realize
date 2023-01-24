@@ -73,4 +73,16 @@ declare type WatchCallback = (newVal, oldVal, onInvalidate: Function) => any
 
 declare type ReactiveOptions = Partial<{
   isShallow: boolean
+  isReadonly: boolean
 }>
+
+declare type ReactiveObject<S extends AnyObject, O extends ReactiveOptions> =
+  O['isReadonly'] extends true ? O['isShallow'] extends true ?
+  {
+    readonly [P in keyof S]: S[P] // # 浅只读
+  } & AnyObject :
+  O['isReadonly'] extends true ? {
+    readonly [P in keyof S]: ReactiveObject<S[P], O>
+  } & AnyObject :
+  S & AnyObject :
+  S & AnyObject
