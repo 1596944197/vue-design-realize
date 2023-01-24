@@ -71,11 +71,25 @@ declare type WatchOptions = Partial<{
  */
 declare type WatchCallback = (newVal, oldVal, onInvalidate: Function) => any
 
+/**
+ * Description placeholder
+ * @date 2023/1/24 - 10:58:00
+ *
+ * @typedef {ReactiveOptions}
+ */
 declare type ReactiveOptions = Partial<{
   isShallow: boolean
   isReadonly: boolean
 }>
 
+/**
+ * Description placeholder
+ * @date 2023/1/24 - 10:58:00
+ *
+ * @typedef {ReactiveObject}
+ * @template S extends AnyObject
+ * @template O extends ReactiveOptions
+ */
 declare type ReactiveObject<S extends AnyObject, O extends ReactiveOptions> =
   O['isReadonly'] extends true ? O['isShallow'] extends true ?
   {
