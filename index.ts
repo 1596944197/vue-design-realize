@@ -143,7 +143,8 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, opt
         return target
       }
 
-      if (!options?.isReadonly) track(target, p)
+      // #为了避免发生意外的错误，以及性能上的考虑，我们不应该在副作用函数与 Symbol.iterator 这类 symbol 值之间建立响应联系
+      if (!options?.isReadonly && typeof p !== 'symbol') track(target, p)
 
       const response = Reflect.get(target, p, receiver)
 
@@ -165,8 +166,11 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, opt
 
       const r = Reflect.set(target, p, value, receiver)
 
-      if (!Object.is(oldVal, value) && Object.is(target, receiver._sourceObj)) {
-        trigger(target, p, type)
+      // # 避免当原型也是响应式数据时，多次触发更新
+      if (!Object.is(target, receiver._sourceObj)) return r
+
+      if (!Object.is(oldVal, value)) {
+        trigger(target, p, type, value)
       }
 
       return r
@@ -190,7 +194,7 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, opt
       return Reflect.has(target, p)
     },
     ownKeys(target) {
-      track(target, ITERATE_KEY)
+      track(target, Array.isArray(target) ? 'length' : ITERATE_KEY)
       return Reflect.ownKeys(target)
     },
   })
@@ -253,7 +257,7 @@ function track(target, p) {
  * @param p 访问的属性
  * @returns  void
  */
-function trigger(target, p, type?: CurrentSetType) {
+function trigger(target, p, type?: CurrentSetType, newVal?) {
   const depsMap = bucket.get(target)
 
   if (!depsMap) return
@@ -268,6 +272,16 @@ function trigger(target, p, type?: CurrentSetType) {
     if (Array.isArray(target)) {
       depsMap.get('length')?.forEach(v => v && deps.add(v))
     }
+  }
+
+  // # 当数组的length属性变更时，检测是否需要触发回调
+  if (Array.isArray(target) && p === 'length') {
+    depsMap.forEach((effectHandlerSet, key) => {
+      if (typeof key === 'symbol') return
+      if (+key >= newVal) {
+        effectHandlerSet.forEach(v => v && deps.add(v))
+      }
+    })
   }
 
   // # 当前活动的副作用函数如何与遍历出来的副作用函数相同，则取消执行
@@ -612,19 +626,12 @@ effect(() => obj.bar)
 
 obj.value++
 
+
 effect(() => {
-  for (const key in obj) {
-    key
+  for (const iterator of arr) {
+    console.log(iterator)
   }
 })
 
-effect(() => obj.nan)
-
-obj.nan = NaN
-
-
-effect(() => {
-  console.log(arr.length)
-})
-
-arr[5] = 0xff
+arr[100] = 0xff
+arr.length = 1
