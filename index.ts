@@ -102,6 +102,7 @@ const effectStack: ActiveEffectType[] = []
 
 const bucket = new WeakMap<Object, Map<string | symbol, Set<ActiveEffectType>>>()
 
+// # for in 操作标识
 const ITERATE_KEY = Symbol()
 // ! 常量属性end
 
@@ -117,13 +118,16 @@ const source = {
   nan: NaN
 }
 
-
 const f1 = { foo: { bar: { a: 1, b: 2 } } }
+
+const array = [1, 2, 3, 4, 5]
 
 const obj = reactive(source)
 
 // # 测试继承、只读、浅响应等
 const child = shallowReadonlyReactive(f1)
+
+const arr = reactive(array)
 
 enum CurrentSetType {
   ADD = 'ADD',
@@ -157,7 +161,8 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, opt
 
       const oldVal = target[p]
 
-      const type = Object.prototype.hasOwnProperty.call(target, p) ? CurrentSetType['SET'] : CurrentSetType['ADD']
+      const type = Array.isArray(target) ? +p >= target.length ? CurrentSetType['ADD'] : CurrentSetType['SET'] : Object.prototype.hasOwnProperty.call(target, p) ? CurrentSetType['SET'] : CurrentSetType['ADD']
+
       const r = Reflect.set(target, p, value, receiver)
 
       if (!Object.is(oldVal, value) && Object.is(target, receiver._sourceObj)) {
@@ -258,6 +263,11 @@ function trigger(target, p, type?: CurrentSetType) {
   if (type === CurrentSetType['ADD'] || type === CurrentSetType['DELETE']) {
     // # 只有当给对象添加属性时，才会触发 for in相关操作
     depsMap.get(ITERATE_KEY)?.forEach(v => v && deps.add(v))
+
+    // # 当涉及到数组的增加和修改操作时，触发length的相关回调
+    if (Array.isArray(target)) {
+      depsMap.get('length')?.forEach(v => v && deps.add(v))
+    }
   }
 
   // # 当前活动的副作用函数如何与遍历出来的副作用函数相同，则取消执行
@@ -612,3 +622,9 @@ effect(() => obj.nan)
 
 obj.nan = NaN
 
+
+effect(() => {
+  console.log(arr.length)
+})
+
+arr[5] = 0xff
