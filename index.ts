@@ -104,6 +104,49 @@ const bucket = new WeakMap<Object, Map<string | symbol, Set<ActiveEffectType>>>(
 
 // # for in 操作标识
 const ITERATE_KEY = Symbol()
+
+// # 定义一个 Map 实例，存储原始对象到代理对象的映射
+const reactiveMap = new Map()
+
+// # 为了避免数组调用原生方法时出现的错误引用问题，数组需要拦截特定字段方法执行
+let shouldTrack = true
+const ArrayInterceptor = (() => {
+  const ArrayInterceptorHandler = (method) => {
+    return function l(this: any, ...args: any) {
+      const originMethod = Array.prototype[method]
+
+      //# 首先在代理对象中找
+      let res = originMethod.apply(this, args)
+
+      if (!res) {
+        // # 没找到再到原始对象中找
+        res = originMethod.apply(this._sourceObj, args)
+      }
+      // 返回最终结果
+      return res
+    }
+  }
+  const ArrayInterceptorHandlerByLength = (method) => {
+    return function p(this: any, ...args: any) {
+      const originMethod = Array.prototype[method]
+      shouldTrack = false
+      let res = originMethod.apply(this, args)
+      shouldTrack = true
+      return res
+    }
+  }
+  return {
+    ...['includes', 'indexOf', 'lastIndexOf'].reduce((pre, cur) => ({
+      ...pre,
+      [cur]: ArrayInterceptorHandler(cur)
+    }), {}),
+    ...['push', 'pop', 'shift', 'unshift', 'splice'].reduce((pre, cur) => ({
+      ...pre,
+      [cur]: ArrayInterceptorHandlerByLength(cur)
+    }), {})
+  }
+})()
+
 // ! 常量属性end
 
 const source = {
@@ -120,14 +163,15 @@ const source = {
 
 const f1 = { foo: { bar: { a: 1, b: 2 } } }
 
-const array = [1, 2, 3, 4, 5]
-
-const obj = reactive(source)
+const obj = reactive(f1)
 
 // # 测试继承、只读、浅响应等
 const child = shallowReadonlyReactive(f1)
 
-const arr = reactive(array)
+const arr = reactive([1, 2, 3, 4, 5])
+
+const a1 = { a: 1 }
+const testInclude = reactive([a1])
 
 enum CurrentSetType {
   ADD = 'ADD',
@@ -137,10 +181,16 @@ enum CurrentSetType {
 
 
 function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, options?: O): ReactiveObject<T, O> {
-  return new Proxy<ReactiveObject<T, O>>(source, {
+  if (reactiveMap.has(source)) return reactiveMap.get(source)
+
+  const reactiveObject = new Proxy<ReactiveObject<T, O>>(source, {
     get(target, p, receiver) {
       if (p === '_sourceObj') {
         return target
+      }
+
+      if (typeof p === 'string' && Array.isArray(target) && ArrayInterceptor[p]) {
+        return Reflect.get(ArrayInterceptor, p, receiver)
       }
 
       // #为了避免发生意外的错误，以及性能上的考虑，我们不应该在副作用函数与 Symbol.iterator 这类 symbol 值之间建立响应联系
@@ -149,7 +199,8 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, opt
       const response = Reflect.get(target, p, receiver)
 
       if (typeof response === 'object' && !Object.is(response, NaN) && !options?.isShallow) {
-        return options?.isReadonly ? reactive(response, options) : reactive(response)
+        // ! 等待改良response类型
+        return options?.isReadonly ? reactive(response as any, options) : reactive(response as any)
       }
 
       return response
@@ -198,6 +249,10 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, opt
       return Reflect.ownKeys(target)
     },
   })
+
+  reactiveMap.set(source, reactiveObject)
+
+  return reactiveObject
 }
 
 
@@ -233,7 +288,7 @@ function track(target, p) {
   // # 没有 activeEffect，直接 return
 
   // if (!activeEffect) return Reflect.get(target, p)
-  if (!activeEffect) return
+  if (!activeEffect || !shouldTrack) return
 
   let depsMap = bucket.get(target)
 
@@ -628,10 +683,22 @@ obj.value++
 
 
 effect(() => {
-  for (const iterator of arr) {
-    console.log(iterator)
+  for (const iterator of arr.values()) {
+    iterator
   }
 })
 
-arr[100] = 0xff
-arr.length = 1
+arr[10] = 0xff
+
+effect(() => {
+  testInclude.includes(a1)
+})
+
+
+effect(() => {
+  console.log(arr.push(0x22))
+})
+
+effect(() => {
+  console.log(arr.push(0x33))
+})
