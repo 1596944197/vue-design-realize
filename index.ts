@@ -152,16 +152,20 @@ const ES6SetInterceptor = (() => {
   const SetInterceptorHandler = (method) => {
     return function l(this: any, ...args: any) {
       const originMethod = Set.prototype[method]
-      const oldSize = this.size
+
+      const target = this._sourceObj
+
+      const oldSize = target.size
+
 
       // # 没找到再到原始对象中找
-      let res = originMethod.apply(this._sourceObj, args)
+      let res = originMethod.apply(target, args)
 
       if (oldSize > this.size) {
-        trigger(this._sourceObj, 'size', CurrentSetType['DELETE'])
+        trigger(target, 'size', CurrentSetType['DELETE'])
       }
       if (oldSize < this.size) {
-        trigger(this._sourceObj, 'size', CurrentSetType['ADD'])
+        trigger(target, 'size', CurrentSetType['ADD'])
       }
 
       // 返回最终结果
