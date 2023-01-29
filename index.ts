@@ -115,7 +115,7 @@ const ArrayInterceptor = (() => {
     return function l(this: any, ...args: any) {
       const originMethod = Array.prototype[method]
 
-      //# 首先在代理对象中找
+      //# 首先在代理对象中找 / 此步骤是否可以省略？
       let res = originMethod.apply(this, args)
 
       if (!res) {
@@ -147,6 +147,43 @@ const ArrayInterceptor = (() => {
   }
 })()
 
+// # 为了避免Set和Map原生方法的错误执行，进行拦截字段
+const ES6SetInterceptor = (() => {
+  const SetInterceptorHandler = (method) => {
+    return function l(this: any, ...args: any) {
+      const originMethod = Set.prototype[method]
+      const oldSize = this.size
+
+      // # 没找到再到原始对象中找
+      let res = originMethod.apply(this._sourceObj, args)
+
+      if (oldSize > this.size) {
+        trigger(this._sourceObj, 'size', CurrentSetType['DELETE'])
+      }
+      if (oldSize < this.size) {
+        trigger(this._sourceObj, 'size', CurrentSetType['ADD'])
+      }
+
+      // 返回最终结果
+      return res
+    }
+  }
+  return {
+    ...['has', 'delete', 'add'].reduce((pre, cur) => ({
+      ...pre,
+      [cur]: SetInterceptorHandler(cur)
+    }), {})
+  }
+})()
+
+function getType(obj: any) {
+  let type = Object.prototype.toString.call(obj)!.match(/^\[object (.*)\]$/)![1].toLowerCase();
+  if (type === 'string' && typeof obj === 'object') return 'object'; // Let "new String('')" return 'object'
+  if (obj === null) return 'null'; // PhantomJS has type "DOMWindow" for null
+  if (obj === undefined) return 'undefined'; // PhantomJS has type "DOMWindow" for undefined
+  return type;
+}
+
 // ! 常量属性end
 
 const source = {
@@ -173,6 +210,9 @@ const arr = reactive([1, 2, 3, 4, 5])
 const a1 = { a: 1 }
 const testInclude = reactive([a1])
 
+const s1 = new Set([1, 0x11, 0x22])
+const testSet = reactive(s1)
+
 enum CurrentSetType {
   ADD = 'ADD',
   SET = 'SET',
@@ -183,7 +223,7 @@ enum CurrentSetType {
 function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, options?: O): ReactiveObject<T, O> {
   if (reactiveMap.has(source)) return reactiveMap.get(source)
 
-  const reactiveObject = new Proxy<ReactiveObject<T, O>>(source, {
+  const reactiveObject = new Proxy(source, {
     get(target, p, receiver) {
       if (p === '_sourceObj') {
         return target
@@ -191,6 +231,14 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, opt
 
       if (typeof p === 'string' && Array.isArray(target) && ArrayInterceptor[p]) {
         return Reflect.get(ArrayInterceptor, p, receiver)
+      }
+
+      if (getType(target) === 'set') {
+        if (p === 'size') {
+          track(target, p)
+          return Reflect.get(target, p, target)
+        }
+        return Reflect.get(ES6SetInterceptor, p, receiver)
       }
 
       // #为了避免发生意外的错误，以及性能上的考虑，我们不应该在副作用函数与 Symbol.iterator 这类 symbol 值之间建立响应联系
@@ -696,9 +744,18 @@ effect(() => {
 
 
 effect(() => {
-  console.log(arr.push(0x22))
+  arr.push(0x22)
 })
 
 effect(() => {
-  console.log(arr.push(0x33))
+  arr.push(0x33)
 })
+
+effect(() => {
+  console.log(testSet.size)
+})
+
+testSet.add(0xff * 0xff)
+
+testSet.add(111)
+testSet.delete(111)
