@@ -498,7 +498,7 @@ function trigger(target, p, type?: CurrentSetType, newVal?) {
 
   let deps = new Set(depsMap.get(p))
 
-  if (type === CurrentSetType['ADD'] || type === CurrentSetType['DELETE']) {
+  if (type === CurrentSetType['ADD'] || type === CurrentSetType['DELETE'] || (type === CurrentSetType['SET'] && getType(target) === 'map')) {
     // # 只有当给对象添加属性时，才会触发 for in相关操作
     depsMap.get(ITERATE_KEY)?.forEach(v => v && deps.add(v))
 
@@ -905,8 +905,8 @@ testMap.set(0x11, 2) // 触发响应
 
 effect(() => {
   testMap.forEach(function l(v, i, t) {
-    v; i; t
+    console.log(v, i, t)
   })
 })
 
-testMap.set(0xe3, 66)
+testMap.set(0x11, 66)
