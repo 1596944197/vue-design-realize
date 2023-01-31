@@ -108,6 +108,9 @@ const ITERATE_KEY = Symbol()
 // # 定义一个 Map 实例，存储原始对象到代理对象的映射
 const reactiveMap = new Map()
 
+// # proxy的源对象，使用symbol来决定
+const sourceObj = Symbol('source_obj')
+
 // # 为了避免数组调用原生方法时出现的错误引用问题，数组需要拦截特定字段方法执行
 let shouldTrack = true
 const ArrayInterceptor = (() => {
@@ -120,7 +123,7 @@ const ArrayInterceptor = (() => {
 
       if (!res) {
         // # 没找到再到原始对象中找
-        res = originMethod.apply(this._sourceObj, args)
+        res = originMethod.apply(this[sourceObj], args)
       }
       // 返回最终结果
       return res
@@ -153,7 +156,7 @@ const ES6SetInterceptor = (() => {
     return function l(this: any, ...args: any) {
       const originMethod = Set.prototype[method]
 
-      const target = this._sourceObj
+      const target = this[sourceObj]
 
       const oldSize = target.size
 
@@ -172,14 +175,127 @@ const ES6SetInterceptor = (() => {
       return res
     }
   }
+
+  const forEach = function l<T extends Set<any>>(this: T, callback: Function, thisArg?: any) {
+    const target: T = this[sourceObj]
+
+    const wrap = (v) => typeof v === 'object' ? reactive(v) : v
+
+    // # 不管怎样，都是跟踪源数据，而不是跟踪传入的thisArg
+    track(target, ITERATE_KEY)
+
+    if (thisArg) {
+      thisArg.forEach((value, index) => {
+        const t = thisArg || this
+
+        callback.call(t, wrap(value), wrap(index), this)
+      }, thisArg)
+    } else {
+      target.forEach((value, index) => {
+        const t = thisArg || this
+
+        callback.call(t, wrap(value), wrap(index), this)
+      }, target)
+    }
+  }
+
   return {
     ...['has', 'delete', 'add'].reduce((pre, cur) => ({
       ...pre,
       [cur]: SetInterceptorHandler(cur)
-    }), {})
+    }), {}),
+    forEach,
+    [Symbol.iterator]: () => { }
   }
 })()
 
+const ES6MapInterceptor = (() => {
+  const MapInterceptorHandler = (method) => {
+    return function l(this: any, ...args: any) {
+      const originMethod = Map.prototype[method]
+
+      const target = this[sourceObj]
+
+      const oldSize = target.size
+
+      // # 没找到再到原始对象中找
+      const res = originMethod.apply(target, args)
+
+      if (oldSize > this.size) {
+        trigger(target, 'size', CurrentSetType['DELETE'])
+      }
+      if (oldSize < this.size) {
+        trigger(target, 'size', CurrentSetType['ADD'])
+      }
+
+      // 返回最终结果
+      return res
+    }
+  }
+  const get = function l(this: any, key) {
+    const target: Map<any, any> = this[sourceObj]
+
+    const had = target.has(key)
+    // 追踪依赖，建立响应联系
+    track(target, key)
+    // 如果存在，则返回结果。这里要注意的是，如果得到的结果 res 仍然是可代理的数据，
+    // 则要返回使用 reactive 包装后的响应式数据
+    if (had) {
+      const res = target.get(key)
+      return typeof res === 'object' ? reactive(res) : res
+    }
+  }
+  const set = function l(this: any, key, value) {
+    const target: Map<any, any> = this[sourceObj]
+
+    const had = target.has(key)
+
+    const oldVal = had ? target.get(key) : undefined
+
+    // # 解决污染原始数据，当检测到即将设置的值是响应式对象时，进行判定
+    const res = target.set(key, value[sourceObj] ? value[sourceObj] : value)
+
+    const newVal = target.get(key)
+
+    if (!Object.is(oldVal, newVal)) {
+      if (had) {
+        trigger(target, key, CurrentSetType['SET'])
+      } else {
+        trigger(target, key, CurrentSetType['ADD'])
+      }
+    }
+    return res
+  }
+  const forEach = function l<T extends Map<any, any>>(this: T, callback: Function, thisArg?) {
+    const target: T = this[sourceObj]
+
+    const wrap = (v) => typeof v === 'object' ? reactive(v) : v
+
+    track(target, ITERATE_KEY)
+
+    target.forEach((v, i, t) => {
+      callback.call(this, wrap(v), wrap(i), t)
+    })
+  }
+  return {
+    ...['delete', 'has'].reduce((pre, cur) => ({
+      ...pre,
+      [cur]: MapInterceptorHandler(cur)
+    }), {}),
+    get,
+    set,
+    forEach
+  }
+})()
+
+
+/**
+ * ### 获取数据的类型
+ * @date 2023/1/31 - 14:20:37
+ *
+ * @param {*} obj
+ * @returns {String}
+ */
 function getType(obj: any) {
   let type = Object.prototype.toString.call(obj)!.match(/^\[object (.*)\]$/)![1].toLowerCase();
   if (type === 'string' && typeof obj === 'object') return 'object'; // Let "new String('')" return 'object'
@@ -217,6 +333,9 @@ const testInclude = reactive([a1])
 const s1 = new Set([1, 0x11, 0x22])
 const testSet = reactive(s1)
 
+const m1 = new Map([[0x1f, 1]])
+const testMap = reactive(m1)
+
 enum CurrentSetType {
   ADD = 'ADD',
   SET = 'SET',
@@ -229,7 +348,7 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, opt
 
   const reactiveObject = new Proxy(source, {
     get(target, p, receiver) {
-      if (p === '_sourceObj') {
+      if (p === sourceObj) {
         return target
       }
 
@@ -243,6 +362,14 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, opt
           return Reflect.get(target, p, target)
         }
         return Reflect.get(ES6SetInterceptor, p, receiver)
+      }
+
+      if (getType(target) === 'map') {
+        if (p === 'size') {
+          track(target, p)
+          return Reflect.get(target, p, target)
+        }
+        return Reflect.get(ES6MapInterceptor, p, receiver)
       }
 
       // #为了避免发生意外的错误，以及性能上的考虑，我们不应该在副作用函数与 Symbol.iterator 这类 symbol 值之间建立响应联系
@@ -270,7 +397,7 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, opt
       const r = Reflect.set(target, p, value, receiver)
 
       // # 避免当原型也是响应式数据时，多次触发更新
-      if (!Object.is(target, receiver._sourceObj)) return r
+      if (!Object.is(target, receiver[sourceObj])) return r
 
       if (!Object.is(oldVal, value)) {
         trigger(target, p, type, value)
@@ -375,9 +502,15 @@ function trigger(target, p, type?: CurrentSetType, newVal?) {
     // # 只有当给对象添加属性时，才会触发 for in相关操作
     depsMap.get(ITERATE_KEY)?.forEach(v => v && deps.add(v))
 
+
     // # 当涉及到数组的增加和修改操作时，触发length的相关回调
     if (Array.isArray(target)) {
       depsMap.get('length')?.forEach(v => v && deps.add(v))
+    }
+
+    // # 当涉及到map的size属性修改
+    if (getType(target) === 'map') {
+      depsMap.get('size')?.forEach(v => v && deps.add(v))
     }
   }
 
@@ -746,7 +879,6 @@ effect(() => {
   testInclude.includes(a1)
 })
 
-
 effect(() => {
   arr.push(0x22)
 })
@@ -756,10 +888,25 @@ effect(() => {
 })
 
 effect(() => {
-  console.log(testSet.size)
+  testSet.forEach(function l(value, index, that) {
+    value; index
+  }, new Set([2, 5, 8, 9]))
+})
+testSet.add(111)
+
+testSet.delete(111)
+
+
+effect(() => {
+  testMap.size
 })
 
-testSet.add(0xff * 0xff)
+testMap.set(0x11, 2) // 触发响应
 
-testSet.add(111)
-testSet.delete(111)
+effect(() => {
+  testMap.forEach(function l(v, i, t) {
+    v; i; t
+  })
+})
+
+testMap.set(0xe3, 66)
