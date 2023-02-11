@@ -209,6 +209,19 @@ const ES6SetInterceptor = (() => {
   }
 })()
 
+
+/**
+ * ### 包装属性
+ * @date 2023/2/11 - 10:37:44
+ *
+ * @template T
+ * @param {T} v
+ * @returns {*}
+ */
+function wrap<T>(v: T) {
+  return typeof v === 'object' && v !== null ? reactive(v) : v
+}
+
 const ES6MapInterceptor = (() => {
   const MapInterceptorHandler = (method) => {
     return function l(this: any, ...args: any) {
@@ -269,13 +282,55 @@ const ES6MapInterceptor = (() => {
   const forEach = function l<T extends Map<any, any>>(this: T, callback: Function, thisArg?) {
     const target: T = this[sourceObj]
 
-    const wrap = (v) => typeof v === 'object' ? reactive(v) : v
-
     track(target, ITERATE_KEY)
 
     target.forEach((v, i, t) => {
       callback.call(this, wrap(v), wrap(i), t)
     })
+  }
+  const iterationHandler = function l(this: any) {
+    const target = this[sourceObj]
+
+    const iterator = target[Symbol.iterator]()
+
+    track(target, ITERATE_KEY)
+
+    return {
+      next() {
+        // 调用原始迭代器的 next 方法获取 value 和 done
+        const { value, done } = iterator.next()
+        return {
+          // 如果 value 不是 undefined，则对其进行包裹
+          value: value ? [wrap(value[0]), wrap(value[1])] : value,
+          done
+        }
+      },
+      [Symbol.iterator]() {
+        return this
+      }
+    }
+  }
+  const keysHandler = function l(this: any) {
+    const target = this[sourceObj]
+
+    const iterator = target[Symbol.iterator]()
+
+    track(target, ITERATE_KEY)
+
+    return {
+      next() {
+        // 调用原始迭代器的 next 方法获取 value 和 done
+        const { value, done } = iterator.next()
+        return {
+          // 如果 value 不是 undefined，则对其进行包裹
+          value: value && wrap(value[0]),
+          done
+        }
+      },
+      [Symbol.iterator]() {
+        return this
+      }
+    }
   }
   return {
     ...['delete', 'has'].reduce((pre, cur) => ({
@@ -284,7 +339,10 @@ const ES6MapInterceptor = (() => {
     }), {}),
     get,
     set,
-    forEach
+    forEach,
+    [Symbol.iterator]: iterationHandler,
+    entries: iterationHandler,
+    keys: keysHandler
   }
 })()
 
@@ -904,9 +962,16 @@ effect(() => {
 testMap.set(0x11, 2) // 触发响应
 
 effect(() => {
-  testMap.forEach(function l(v, i, t) {
-    console.log(v, i, t)
-  })
+  testMap.forEach(function l(v, i, t) { })
 })
 
 testMap.set(0x11, 66)
+
+
+effect(() => {
+  for (const iterator of testMap.keys()) {
+    console.log(iterator)
+  }
+})
+
+testMap.set(0xff, 100)
