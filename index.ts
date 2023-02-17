@@ -384,6 +384,8 @@ function getType(obj: any) {
   return type;
 }
 
+const isRef = "_isRef";
+
 // ! 常量属性end
 
 const source = {
@@ -462,6 +464,10 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(
       if (!options?.isReadonly && typeof p !== "symbol") track(target, p);
 
       const response = Reflect.get(target, p, receiver);
+
+      if (response?.[isRef]) {
+        return Reflect.get(response, `value`);
+      }
 
       if (
         typeof response === "object" &&
@@ -557,7 +563,7 @@ function ref<T>(Val: T) {
   const wrapper = {
     value: Val,
   };
-  Object.defineProperty(wrapper, "_isRef", {
+  Object.defineProperty(wrapper, isRef, {
     value: true,
     writable: false,
   });
@@ -569,21 +575,18 @@ function toRef<T extends Object>(obj: T, key) {
     get [key]() {
       return obj[key];
     },
-    set [key](value) {
-      obj[key] = value;
-    },
   };
-  Object.defineProperty(wrapper, "_isRef", {
+  Object.defineProperty(wrapper, isRef, {
     value: true,
     writable: true,
   });
-  return ref(wrapper[key]);
+  return ref(obj[key]);
 }
 
 function toRefs<T extends AnyObject>(obj: T) {
   const result: any = {};
   for (const key in obj) {
-    result[key] = toRef(obj, key);
+    result[key] = ref(obj[key]);
   }
 
   return result as {
@@ -593,13 +596,42 @@ function toRefs<T extends AnyObject>(obj: T) {
     };
   };
 }
-const rrrr = { ...toRefs({ a: 1, b: 2, c: 3, d: 4 }) };
+
+function toProxyRefs<T extends AnyObject>(source: T): ToProxyRefsType<T> {
+  const proxy = new Proxy(source, {
+    get(target, p, receiver) {
+      track(target, p);
+      const response = Reflect.get(target, p, receiver);
+
+      if (response?.[isRef]) {
+        return Reflect.get(response, "value");
+      }
+
+      return response;
+    },
+    set(target, p: string, newValue, receiver) {
+      const v = target[p];
+      let value: boolean;
+      if (v[isRef]) {
+        value = Reflect.set(v, "value", newValue);
+      } else {
+        value = Reflect.set(target, p, newValue, receiver);
+      }
+
+      return value;
+    },
+  });
+
+  return proxy;
+}
+
+const rrrr = toProxyRefs({ ...toRefs({ a: 1, b: 2, c: 3, d: 4 }) });
 
 effect(() => {
-  rrrr.a.value;
+  rrrr.b;
 });
 
-rrrr.a.value = 0x11;
+rrrr.b = 0xff;
 
 /**
  * # 跟踪数据
