@@ -871,9 +871,9 @@ export function computed<T extends EffectFunc>(getter: T) {
 }
 
 // # 避免不必要的执行
-effect(() => {
-  document.body.innerHTML = `<h2>${obj.ok ? obj.text : "nothing"}</h2>`;
-});
+// effect(() => {
+//   document.body.innerHTML = `<h2>${obj.ok ? obj.text : "nothing"}</h2>`;
+// });
 
 // # 避免嵌套的副作用函数无法正确捕获
 /**

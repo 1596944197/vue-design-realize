@@ -1,5 +1,5 @@
 /**
- * # 渲染器
+ * # 渲染函数
  * @date 2023/1/21 - 10:12:48
  *
  * @param {RenderType} vNode
