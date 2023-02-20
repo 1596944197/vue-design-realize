@@ -329,7 +329,7 @@ enum CurrentSetType {
   DELETE = "DELETE",
 }
 
-function reactive<T extends AnyObject, O extends ReactiveOptions>(
+export function reactive<T extends AnyObject, O extends ReactiveOptions>(
   source: T,
   options?: O
 ): ReactiveObject<T, O> {
@@ -445,26 +445,26 @@ function reactive<T extends AnyObject, O extends ReactiveOptions>(
   return reactiveObject;
 }
 
-function shallowReactive<T extends AnyObject>(source: T) {
+export function shallowReactive<T extends AnyObject>(source: T) {
   return reactive(source, {
     isShallow: true,
   });
 }
 
-function readonlyReactive<T extends AnyObject>(source: T) {
+export function readonlyReactive<T extends AnyObject>(source: T) {
   return reactive(source, {
     isReadonly: true,
   });
 }
 
-function shallowReadonlyReactive<T extends AnyObject>(source: T) {
+export function shallowReadonlyReactive<T extends AnyObject>(source: T) {
   return reactive(source, {
     isReadonly: true,
     isShallow: true,
   });
 }
 
-function ref<T>(Val: T) {
+export function ref<T>(Val: T) {
   const wrapper = {
     value: Val,
   };
@@ -488,7 +488,7 @@ function toRef<T extends Object>(obj: T, key) {
   return ref(obj[key]);
 }
 
-function toRefs<T extends AnyObject>(obj: T) {
+export function toRefs<T extends AnyObject>(obj: T) {
   const result: any = {};
   for (const key in obj) {
     result[key] = ref(obj[key]);
@@ -502,7 +502,9 @@ function toRefs<T extends AnyObject>(obj: T) {
   };
 }
 
-function toProxyRefs<T extends AnyObject>(source: T): ToProxyRefsType<T> {
+export function toProxyRefs<T extends AnyObject>(
+  source: T
+): ToProxyRefsType<T> {
   const proxy = new Proxy(source, {
     get(target, p, receiver) {
       track(target, p);
@@ -638,7 +640,7 @@ function trigger(target, p, type?: CurrentSetType, newVal?) {
  * @param {?EffectOptions} [options]
  * @returns {{ (): any; options: any; deps: {}; }}
  */
-function effect<T extends EffectFunc>(func: T, options?: EffectOptions) {
+export function effect<T extends EffectFunc>(func: T, options?: EffectOptions) {
   const effectHandler = () => {
     cleanup(effectHandler);
 
@@ -753,7 +755,7 @@ function watch<T extends AnyObject, Cb extends WatchCallback>(
   source: T,
   callback: Cb,
   options?: WatchOptions
-);
+): any;
 /**
  * Description placeholder
  * @date 2023/1/21 - 10:12:48
@@ -840,7 +842,7 @@ function watch<T extends AnyObject, Cb extends WatchCallback>(
  * @param {T} getter
  * @returns {{ readonly value: any; }}
  */
-function computed<T extends EffectFunc>(getter: T) {
+export function computed<T extends EffectFunc>(getter: T) {
   let value: ReturnType<T>;
   let dirty = true; //# 脏值检测
 
