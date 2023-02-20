@@ -1,16 +1,4 @@
 /**
- * # 渲染函数
- * @date 2023/1/21 - 10:12:48
- *
- * @param {RenderType} vNode
- * @param {HTMLElement} container
- */
-function renderer(vNode: RenderType, container: HTMLElement) {
-  if (typeof vNode.tag === "string") mountElement(vNode, container);
-  else mountComponent(vNode, container);
-}
-
-/**
  * Description placeholder
  * @date 2023/1/21 - 10:12:48
  *
@@ -48,7 +36,7 @@ function mountElement(vNode: RenderType, container: HTMLElement) {
     el.appendChild(document.createTextNode(vNode.children));
   } else if (Array.isArray(vNode.children)) {
     // 递归地调用 renderer 函数渲染子节点，使用当前元素 el 作为挂载点
-    vNode.children.forEach((child) => renderer(child, el));
+    vNode.children.forEach((child) => render(child, el));
   }
 
   // 将元素添加到挂载点下
@@ -66,29 +54,60 @@ function mountComponent(vNode: RenderType, container: HTMLElement) {
   if (isFunc(vNode.tag)) {
     const subTree = vNode.tag();
 
-    renderer(subTree, container);
+    render(subTree, container);
   } else if (isFunc(vNode.render)) {
     const subTree = vNode.render();
 
-    renderer(subTree, container);
+    render(subTree, container);
   }
 }
 
-renderer(
-  {
-    tag: "div",
-    children: [
-      { tag: "span", children: "hello world" },
-      {
-        tag: "h2",
-        props: {
-          onClick(...ev) {
-            alert(2123);
-          },
+/**
+ * ### 渲染函数
+ * @date 2/20/2023 - 5:07:33 PM
+ *
+ * @param {RenderType} vNode
+ * @param {RenderContainer} container
+ */
+function render(vNode: RenderType, container: RenderContainer) {
+  if (vNode) {
+    // 新 vnode 存在，将其与旧 vnode 一起传递给 patch 函数，进行打补丁
+    patch(container._vNode, vNode, container);
+  } else {
+    if (container._vNode) {
+      container.innerHTML = "";
+    }
+  }
+  container._vNode = vNode;
+
+  if (typeof vNode.tag === "string") mountElement(vNode, container);
+  else mountComponent(vNode, container);
+}
+
+function patch(...args) {}
+
+function createRenderer() {
+  return {
+    render,
+  };
+}
+
+const vn = {
+  tag: "div",
+  children: [
+    { tag: "span", children: "hello world" },
+    {
+      tag: "h2",
+      props: {
+        onClick(...ev) {
+          alert(2123);
         },
-        children: [{ tag: "span", children: "测试" }],
       },
-    ],
-  },
-  document.body
-);
+      children: [{ tag: "span", children: "测试" }],
+    },
+  ],
+};
+
+const r = createRenderer();
+// # 首次渲染
+r.render(vn, document.body);

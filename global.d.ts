@@ -112,3 +112,5 @@ declare type ReactiveObject<
 declare type ToProxyRefsType<T extends AnyObject> = {
   [K in keyof T]: T[K] | T[K]["value"];
 };
+
+declare type RenderContainer = HTMLElement & { _vNode? };
