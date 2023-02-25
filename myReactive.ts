@@ -21,17 +21,20 @@ export namespace MyReactive {
     },
   }
 
-  export function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, options?: O) {
+  export function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, options?: O): ReactiveObject<T, O> {
     const proxy = new Proxy<T>(source, {
       get(target, p, receiver) {
         track(target, p)
 
-        // # 如果只是浅响应-那就只响应一层，否则递归处理
-        if (!options?.isShallow && typeof p === 'string' && isObject(target[p])) {
-          reactive(target[p], options)
+        const value = Reflect.get(target, p, receiver)
+
+        // # 如果只是浅响应-那就只响应一层，否则套一层再返回
+        if (!options?.isShallow && isObject(value)) {
+          // # 返回包装对象，不燃深响应毫无意义
+          return reactive(value, options)
         }
 
-        return Reflect.get(target, p, receiver)
+        return value
       },
       set(target, p, value, receiver) {
         const result = Reflect.set(target, p, value, receiver)
