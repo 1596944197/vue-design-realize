@@ -5,8 +5,8 @@
  * @typedef {AnyObject}
  */
 declare type AnyObject = {
-  [P in keyof any]: any
-} & Object
+  [P in keyof any]: any;
+} & Object;
 
 /**
  * Description placeholder
@@ -16,13 +16,13 @@ declare type AnyObject = {
  * @template T extends AnyObject = AnyObject
  */
 declare type RenderType<T extends AnyObject = AnyObject> = {
-  tag: string | (() => RenderType),
-  children: RenderType[] | string
+  tag: string | (() => RenderType);
+  children: RenderType[] | string;
   props?: {
-    [P in keyof T]: T[P]
-  },
-  render?(): RenderType
-}
+    [P in keyof T]: T[P];
+  };
+  render?(): RenderType;
+};
 
 /**
  * Description placeholder
@@ -33,8 +33,8 @@ declare type RenderType<T extends AnyObject = AnyObject> = {
  */
 declare type EffectOptions<T = ActiveEffectType> = Partial<{
   scheduler(effectHandler: T): ReturnType<T>;
-  lazy: boolean
-}>
+  lazy: boolean;
+}>;
 
 /**
  * Description placeholder
@@ -42,7 +42,11 @@ declare type EffectOptions<T = ActiveEffectType> = Partial<{
  *
  * @typedef {ActiveEffectType}
  */
-declare type ActiveEffectType = { (): void; deps: Set<Function>[], options?: EffectOptions }
+declare type ActiveEffectType = {
+  (): void;
+  deps: Set<Function>[];
+  options?: EffectOptions;
+};
 
 /**
  * Description placeholder
@@ -50,7 +54,7 @@ declare type ActiveEffectType = { (): void; deps: Set<Function>[], options?: Eff
  *
  * @typedef {EffectFunc}
  */
-declare type EffectFunc = () => any
+declare type EffectFunc = () => any;
 
 /**
  * Description placeholder
@@ -59,9 +63,9 @@ declare type EffectFunc = () => any
  * @typedef {WatchOptions}
  */
 declare type WatchOptions = Partial<{
-  immediate: boolean
-  flush: 'post' | 'sync'
-}>
+  immediate: boolean;
+  flush: "post" | "sync";
+}>;
 
 /**
  * Description placeholder
@@ -69,7 +73,7 @@ declare type WatchOptions = Partial<{
  *
  * @typedef {WatchCallback}
  */
-declare type WatchCallback = (newVal, oldVal, onInvalidate: Function) => any
+declare type WatchCallback = (newVal, oldVal, onInvalidate: Function) => any;
 
 /**
  * Description placeholder
@@ -78,9 +82,9 @@ declare type WatchCallback = (newVal, oldVal, onInvalidate: Function) => any
  * @typedef {ReactiveOptions}
  */
 declare type ReactiveOptions = Partial<{
-  isShallow: boolean
-  isReadonly: boolean
-}>
+  isShallow: boolean;
+  isReadonly: boolean;
+}>;
 
 /**
  * Description placeholder
@@ -90,13 +94,23 @@ declare type ReactiveOptions = Partial<{
  * @template S extends AnyObject
  * @template O extends ReactiveOptions
  */
-declare type ReactiveObject<S extends AnyObject, O extends ReactiveOptions> =
-  O['isReadonly'] extends true ? O['isShallow'] extends true ?
-  {
-    readonly [P in keyof S]: S[P] // # 浅只读
-  } & AnyObject :
-  O['isReadonly'] extends true ? {
-    readonly [P in keyof S]: ReactiveObject<S[P], O>
-  } & AnyObject :
-  S & AnyObject :
-  S & AnyObject
+declare type ReactiveObject<
+  S extends AnyObject,
+  O extends ReactiveOptions
+> = O["isReadonly"] extends true
+  ? O["isShallow"] extends true
+    ? {
+        readonly [P in keyof S]: S[P]; // # 浅只读
+      } & AnyObject
+    : O["isReadonly"] extends true
+    ? {
+        readonly [P in keyof S]: ReactiveObject<S[P], O>;
+      } & AnyObject
+    : S & AnyObject
+  : S & AnyObject;
+
+declare type ToProxyRefsType<T extends AnyObject> = {
+  [K in keyof T]: T[K] | T[K]["value"];
+};
+
+declare type RenderContainer = HTMLElement & { _vNode? };
