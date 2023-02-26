@@ -11,19 +11,36 @@ export namespace MyReactive {
   const Buckets = new Map<AnyObject, Map<keyof any, Set<Function>>>()
 
   let activeEffect: Function
+
+  const sourceObj = 'sourceObj'
+
+  const ArrayInterceptorFields = ['includes', 'indexOf']
+  const ArrayInterceptorHandler = (() => {
+    const handler = (method) => function l(this: AnyObject, ...args) {
+      const h = Array.prototype[method]
+      if (!h) return
+      return h.apply(this[sourceObj], args)
+    }
+    return {
+      ...ArrayInterceptorFields.reduce((pre, cur) => ({
+        ...pre,
+        [cur]: handler(cur)
+      }), {})
+    }
+  })()
   // ! 常量end
 
-  const source = {
-    a: 1,
-    b: true,
-    c: {
-      d: 2
-    },
+  const f1 = {
+    a: 1
   }
+  const source = [f1]
 
   export function reactive<T extends AnyObject, O extends ReactiveOptions>(source: T, options?: O): ReactiveObject<T, O> {
     const proxy = new Proxy<T>(source, {
       get(target, p, receiver) {
+        if (p === sourceObj) {
+          return target
+        }
         track(target, p)
 
         const value = Reflect.get(target, p, receiver)
@@ -34,12 +51,19 @@ export namespace MyReactive {
           return reactive(value, options)
         }
 
+        if (Array.isArray(target) && typeof p === 'string' && ArrayInterceptorFields.includes(p)) {
+          return Reflect.get(ArrayInterceptorHandler, p, receiver)
+        }
+
         return value
       },
       set(target, p, value, receiver) {
+        if (options?.isReadonly) return false
+
         const result = Reflect.set(target, p, value, receiver)
 
-        trigger(target, p)
+        if (p === 'length') trigger(target, p, value)
+        else trigger(target, p)
 
         return result
       },
@@ -55,11 +79,18 @@ export namespace MyReactive {
     keyList.add(activeEffect)
   }
 
-  function trigger(target: AnyObject, p: keyof any) {
+  function trigger(target: AnyObject, p: keyof any, newValue?) {
     const bucket = Buckets.get(target)
 
     if (!bucket) return
-    const callbackList = bucket.get(p)!
+    let callbackList = bucket.get(p) ?? new Set
+
+    if (Array.isArray(target) && p === 'length') {
+      bucket.forEach((value, key) => {
+        if (typeof key === 'symbol') return
+        if (key >= newValue) value.forEach(cb => callbackList.add(cb))
+      })
+    }
 
     callbackList.forEach(cb => cb())
   }
@@ -76,7 +107,7 @@ export namespace MyReactive {
   const r1 = reactive(source)
 
   effect(() => {
-    console.log(r1.c.d)
+    console.log(r1.includes(f1))
+    console.log(r1.indexOf(f1))
   })
-  r1.c.d = 0x15
 }
