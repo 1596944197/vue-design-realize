@@ -114,3 +114,5 @@ declare type ToProxyRefsType<T extends AnyObject> = {
 };
 
 declare type RenderContainer = HTMLElement & { _vNode? };
+
+declare type AnyArr = any[];
