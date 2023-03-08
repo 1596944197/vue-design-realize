@@ -16,7 +16,7 @@ declare type AnyObject = {
  * @template T extends AnyObject = AnyObject
  */
 declare type RenderType<T extends AnyObject = AnyObject> = {
-  tag: string | (() => RenderType);
+  tag: string;
   children: RenderType[] | string;
   props?: {
     [P in keyof T]: T[P];
@@ -113,6 +113,14 @@ declare type ToProxyRefsType<T extends AnyObject> = {
   [K in keyof T]: T[K] | T[K]["value"];
 };
 
-declare type RenderContainer = HTMLElement & { _vNode? };
+declare type RenderContainer = AnyObject & { _vNode? };
 
 declare type AnyArr = any[];
+
+declare type CreateRenderOptions = Partial<{
+  createElement(tag: string): any;
+  // 用于设置元素的文本节点
+  setElementText(el: HTMLElement, text): void;
+  // 用于在给定的 parent 下添加指定元素
+  insert(el: AnyObject, parent: AnyObject, anchor?): void;
+}>;
