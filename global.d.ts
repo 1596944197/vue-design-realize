@@ -15,8 +15,8 @@ declare type AnyObject = {
  * @typedef {RenderType}
  * @template T extends AnyObject = AnyObject
  */
-declare type RenderType<T extends AnyObject = AnyObject> = {
-  tag: string;
+declare type RenderType<T extends RenderType = AnyObject> = {
+  type: string;
   children: RenderType[] | string;
   props?: {
     [P in keyof T]: T[P];
@@ -97,30 +97,31 @@ declare type ReactiveOptions = Partial<{
 declare type ReactiveObject<
   S extends AnyObject,
   O extends ReactiveOptions
-> = O["isReadonly"] extends true
+  > = O["isReadonly"] extends true
   ? O["isShallow"] extends true
-    ? {
-        readonly [P in keyof S]: S[P]; // # 浅只读
-      } & AnyObject
-    : O["isReadonly"] extends true
-    ? {
-        readonly [P in keyof S]: ReactiveObject<S[P], O>;
-      } & AnyObject
-    : S & AnyObject
+  ? {
+    readonly [P in keyof S]: S[P]; // # 浅只读
+  } & AnyObject
+  : O["isReadonly"] extends true
+  ? {
+    readonly [P in keyof S]: ReactiveObject<S[P], O>;
+  } & AnyObject
+  : S & AnyObject
   : S & AnyObject;
 
 declare type ToProxyRefsType<T extends AnyObject> = {
   [K in keyof T]: T[K] | T[K]["value"];
 };
 
-declare type RenderContainer = AnyObject & { _vNode? };
+declare type RenderContainer = AnyObject & { _vNode?};
 
 declare type AnyArr = any[];
 
-declare type CreateRenderOptions = Partial<{
+declare type CreateRenderOptions<T extends AnyObject = AnyObject> = Partial<{
   createElement(tag: string): any;
   // 用于设置元素的文本节点
-  setElementText(el: HTMLElement, text): void;
+  setElementText(el: T, text): void;
   // 用于在给定的 parent 下添加指定元素
-  insert(el: AnyObject, parent: AnyObject, anchor?): void;
+  insert(el: T, parent: T, anchor?): void;
+  patchProps(el: T, key, oldProps, newProps): void;
 }>;
